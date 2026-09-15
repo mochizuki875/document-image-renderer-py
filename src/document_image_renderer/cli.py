@@ -16,7 +16,11 @@ def build_parser() -> argparse.ArgumentParser:
         prog="document-image-renderer",
         description="Render every page in a PDF or Office document as an image.",
     )
-    parser.add_argument("source", type=Path, help="PDF, DOCX, PPTX, or XLSX input file")
+    parser.add_argument(
+        "source",
+        type=Path,
+        help="PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX, or XLSM input file",
+    )
     parser.add_argument("output_directory", type=Path, help="directory for rendered images")
     parser.add_argument("--dpi", type=int, default=200, help="rendering resolution (default: 200)")
     parser.add_argument(

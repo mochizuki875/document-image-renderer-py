@@ -81,9 +81,22 @@ def test_converts_office_document_with_isolated_profile(
     source = tmp_path / "input.docx"
     source.write_bytes(b"placeholder")
     captured_command: list[str] = []
+    captured_profile_xml = ""
 
     def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        nonlocal captured_profile_xml
         captured_command.extend(command)
+        profile_argument = next(
+            argument
+            for argument in command
+            if argument.startswith("-env:UserInstallation=file:")
+        )
+        profile_directory = Path(
+            profile_argument.removeprefix("-env:UserInstallation=").removeprefix("file://")
+        )
+        captured_profile_xml = (
+            profile_directory / "user" / "registrymodifications.xcu"
+        ).read_text()
         output_directory = Path(command[command.index("--outdir") + 1])
         create_pdf(output_directory / "input.pdf", page_count=1)
         return subprocess.CompletedProcess(command, 0, "converted", "")
@@ -97,7 +110,8 @@ def test_converts_office_document_with_isolated_profile(
 
     assert result.page_count == 1
     assert "--headless" in captured_command
-    assert any(argument.startswith("-env:UserInstallation=file:") for argument in captured_command)
+    assert 'oor:name="MacroSecurityLevel"' in captured_profile_xml
+    assert "<value>3</value>" in captured_profile_xml
 
 
 def test_normalizes_negative_pptx_line_extents_before_conversion(
@@ -136,10 +150,11 @@ def test_normalizes_negative_pptx_line_extents_before_conversion(
     assert result.page_count == 1
 
 
-def test_fits_each_xlsx_sheet_to_one_landscape_page(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("extension", [".xlsx", ".xlsm"])
+def test_fits_each_modern_excel_sheet_to_one_landscape_page(
+    extension: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    source = tmp_path / "input.xlsx"
+    source = tmp_path / f"input{extension}"
     worksheet_xml = b"""<?xml version="1.0" encoding="UTF-8"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <sheetData/>
@@ -169,6 +184,57 @@ def test_fits_each_xlsx_sheet_to_one_landscape_page(
     result = render_document(source, tmp_path / "images")
 
     assert result.page_count == 1
+
+
+def test_uses_single_page_pdf_filter_for_xls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "input.xls"
+    source.write_bytes(b"placeholder")
+    captured_command: list[str] = []
+
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        captured_command.extend(command)
+        output_directory = Path(command[command.index("--outdir") + 1])
+        create_pdf(output_directory / "input.pdf", page_count=1)
+        return subprocess.CompletedProcess(command, 0, "converted", "")
+
+    monkeypatch.setattr(
+        "document_image_renderer.renderer.shutil.which", lambda _: "/usr/bin/libreoffice"
+    )
+    monkeypatch.setattr("document_image_renderer.renderer.subprocess.run", fake_run)
+
+    result = render_document(source, tmp_path / "images")
+
+    assert result.page_count == 1
+    conversion_filter = captured_command[captured_command.index("--convert-to") + 1]
+    assert "calc_pdf_Export" in conversion_filter
+    assert "SinglePageSheets" in conversion_filter
+
+
+@pytest.mark.parametrize("extension", [".doc", ".ppt"])
+def test_converts_legacy_office_documents_directly(
+    extension: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / f"input{extension}"
+    source.write_bytes(b"placeholder")
+    captured_command: list[str] = []
+
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        captured_command.extend(command)
+        output_directory = Path(command[command.index("--outdir") + 1])
+        create_pdf(output_directory / "input.pdf", page_count=1)
+        return subprocess.CompletedProcess(command, 0, "converted", "")
+
+    monkeypatch.setattr(
+        "document_image_renderer.renderer.shutil.which", lambda _: "/usr/bin/libreoffice"
+    )
+    monkeypatch.setattr("document_image_renderer.renderer.subprocess.run", fake_run)
+
+    render_document(source, tmp_path / "images")
+
+    assert captured_command[-1] == str(source)
+    assert captured_command[captured_command.index("--convert-to") + 1] == "pdf"
 
 
 def test_exposes_libreoffice_diagnostics(

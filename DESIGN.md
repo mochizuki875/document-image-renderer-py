@@ -2,20 +2,22 @@
 
 ## Purpose
 
-`document-image-renderer` is a Python library that converts PDF, DOCX, PPTX, and XLSX content into images, one image per page or worksheet.
+`document-image-renderer` is a Python library that converts PDF, DOC, DOCX, PPT, PPTX, XLS, XLSX, and XLSM content into images, one image per page or worksheet.
 It provides a public API for other Python projects and a command-line interface for the same functionality.
 
 ## Scope
 
-Supported input formats are `.pdf`, `.docx`, `.pptx`, and `.xlsx`.
-Output formats are lossless PNG and quality-configurable JPEG.
+| Input family | Extensions | Output unit | Office conversion |
+|---|---|---|---|
+| PDF | `.pdf` | Page | None |
+| Word | `.doc`, `.docx` | Page | LibreOffice Writer |
+| PowerPoint | `.ppt`, `.pptx` | Slide | LibreOffice Impress |
+| Excel | `.xls`, `.xlsx`, `.xlsm` | Worksheet | LibreOffice Calc |
 
-The output unit is a page for PDF and DOCX, a slide for PPTX, and a worksheet selected by LibreOffice for PDF output for XLSX.
-Each selected XLSX worksheet is scaled to fit on one landscape page before PDF conversion.
-Text and cells may become small on large worksheets because all content must fit on one page.
-Hidden worksheets, print areas, and margins follow the LibreOffice PDF output.
+Output formats are lossless PNG and quality-configurable JPEG. XLS uses content-sized PDF pages through LibreOffice's `SinglePageSheets` export option. XLSX and XLSM use one landscape page per worksheet.
+Hidden worksheets, print areas, and margins otherwise follow LibreOffice PDF output behavior.
 
-Encrypted documents, corrupted documents, macro execution, and legacy Office binary formats are out of scope.
+Encrypted documents, corrupted documents, and macro execution are out of scope.
 
 ## Reproducibility
 
@@ -27,23 +29,50 @@ When redistribution is permitted, fonts used by source documents can be added to
 
 ## Conversion Process
 
-Conversion consists of three stages:
+```mermaid
+flowchart TD
+  input[Input document] --> validate{Supported extension?}
+  validate -->|No| unsupported[UnsupportedFormatError]
+  validate -->|PDF| rasterize[Rasterize pages with PyMuPDF]
+  validate -->|Office| workspace[Create isolated temporary workspace]
+  workspace --> route{Input format}
+  route -->|DOC / DOCX / PPT| direct[Use source directly]
+  route -->|PPTX| pptx[Normalize negative line extents]
+  route -->|XLS| xls[Use SinglePageSheets PDF filter]
+  route -->|XLSX / XLSM| spreadsheet[Set one landscape page per worksheet]
+  direct --> libreoffice[Convert to PDF with LibreOffice]
+  pptx --> libreoffice
+  xls --> libreoffice
+  spreadsheet --> libreoffice
+  libreoffice --> rasterize
+  rasterize --> images[Sequential PNG or JPEG images]
+```
 
-1. Normalize a temporary PPTX or XLSX copy when required.
-2. Convert DOCX, PPTX, or XLSX to PDF with LibreOffice in headless mode.
-3. Rasterize every PDF page to PNG or JPEG with PyMuPDF.
+The pipeline has three conceptual stages:
+
+1. Validate the input and prepare a temporary Office copy when required.
+2. Convert Office input to PDF with LibreOffice in headless mode.
+3. Rasterize every PDF page to PNG or JPEG with PyMuPDF at the requested DPI.
 
 Using PDF as an intermediate representation preserves page dimensions, text, shapes, images, and placement without reimplementing format-specific rendering in this library.
 For PDF input, preprocessing and LibreOffice conversion are skipped.
 
-PPTX preprocessing normalizes lines with negative widths or heights by moving their origins and converting their extents to positive values.
-This compensates for a compatibility difference where PowerPoint corrects such lines for display but LibreOffice renders them mirrored.
-XLSX preprocessing applies `fitToPage`, `fitToWidth=1`, `fitToHeight=1`, and landscape orientation to every worksheet.
-Neither process modifies the input file; only a corrected temporary copy is passed to LibreOffice.
-If ZIP or XML parsing fails during preprocessing, the original input is passed to LibreOffice so that the existing conversion error path reports the failure.
+### Format-specific preparation
+
+| Format | Preparation | Rationale |
+|---|---|---|
+| DOC, DOCX | None | Direct PDF conversion avoids an unnecessary intermediate format. |
+| PPT | None | Direct PDF conversion avoids additional presentation layout changes. |
+| PPTX | Normalize negative line widths and heights in a temporary OOXML copy. | PowerPoint corrects these values for display, while LibreOffice can mirror the line. |
+| XLS | Select `SinglePageSheets` in the Calc PDF export filter. | XLS is binary and cannot use the OOXML worksheet rewrite. |
+| XLSX, XLSM | Apply `fitToPage`, `fitToWidth=1`, `fitToHeight=1`, and landscape orientation in a temporary OOXML copy. | Produces one fixed-format page per worksheet. |
+
+The original input is never modified. If ZIP or XML parsing fails during OOXML preprocessing, the original file is passed to LibreOffice so the normal conversion error path can report the failure.
+
+### Temporary workspace
 
 LibreOffice receives a temporary user profile for each conversion.
-This prevents concurrent processes from contending for the default profile lock.
+This prevents concurrent processes from contending for the default profile lock and removes user-specific settings from the conversion path.
 Intermediate PDFs, temporary Office copies, and profiles are deleted when the `TemporaryDirectory` context exits.
 
 ## Public API
@@ -56,7 +85,7 @@ from pathlib import Path
 from document_image_renderer import RenderOptions, render_document
 
 result = render_document(
-    Path("report.docx"),
+    Path("samplefile.docx"),
     Path("output"),
     options=RenderOptions(dpi=200, image_format="png"),
 )
@@ -90,7 +119,7 @@ LibreOffice standard output and standard error are retained on `DocumentConversi
 ## Security and Resource Control
 
 LibreOffice commands are executed as argument arrays without invoking a shell.
-Macros are not run, and external-link updates are not requested.
+The isolated LibreOffice profile sets macro security to Very High, preventing document macros, including XLSM macros, from running during conversion.
 
 The public API supports a LibreOffice timeout.
 However, the page count, expanded document size, and total image pixel count cannot be known in advance. Services that process untrusted documents must also limit processes, CPU, memory, and storage.
@@ -104,6 +133,7 @@ src/
     cli.py
     exceptions.py
     models.py
+    py.typed
     renderer.py
 tests/
   fixtures/
@@ -120,10 +150,10 @@ PyMuPDF, which handles PDF rendering, is the only runtime Python dependency. Lib
 ## Testing Strategy
 
 Unit tests verify sequential rendering of every PDF page, DPI-derived image dimensions, JPEG options, input validation, and exception conversion.
-They also verify normalization of negative PPTX line extents and the one-page-per-worksheet XLSX settings.
+They also verify negative PPTX line normalization, XLSX/XLSM worksheet settings, the XLS PDF export filter, legacy DOC/PPT routing, and macro security configuration.
 LibreOffice execution is isolated behind a small boundary and replaced in unit tests.
 
-Integration tests convert every document under `tests/fixtures/documents/`, assert that at least one image is generated, and reopen every image with PyMuPDF.
+Integration tests dynamically collect every file directly under `tests/fixtures/documents/`. The fixtures cover all eight supported extensions. Tests assert that at least one image is generated and reopen every image with PyMuPDF.
 Office integration tests are skipped on hosts without LibreOffice and run in the dev container or a CI container.
 
 Pixel-level regressions can be detected by comparing perceptual hashes or image differences against reference images in an environment with fixed fonts and tool versions.

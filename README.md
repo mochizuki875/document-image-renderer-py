@@ -1,18 +1,29 @@
 # document-image-renderer
 
-A Python library that converts PDF, DOCX, PPTX, and XLSX documents into PNG or JPEG images, one image per page or worksheet.
-It provides both a Python API and a command-line interface.
+A Python library and command-line tool that renders PDF and Microsoft Office documents as PNG or JPEG images.
 
 Office documents are converted to PDF with LibreOffice, and every PDF page is rasterized with PyMuPDF.
 LibreOffice is not used when the input is already a PDF.
+
+## Supported formats
+
+| Input | Output unit | Conversion path |
+|---|---|---|
+| PDF | Page | PyMuPDF directly |
+| DOC, DOCX | Page | LibreOffice Writer to PDF |
+| PPT, PPTX | Slide | LibreOffice Impress to PDF |
+| XLS, XLSX, XLSM | Worksheet | LibreOffice Calc to PDF, one page per sheet |
+
+Output formats are PNG and JPEG.
+The source file is never modified; compatibility adjustments are applied only to temporary copies.
 
 ## Requirements
 
 - Python 3.10 or later
 - PDF rendering: PyMuPDF, installed automatically as a Python dependency
-- DOCX, PPTX, and XLSX conversion: LibreOffice
+- DOC, DOCX, PPT, PPTX, XLS, XLSX, and XLSM conversion: LibreOffice
 
-## Reproducibility
+## Rendering fidelity
 
 When the same LibreOffice version, PyMuPDF version, fonts, and locale are used, every page fixed in the intermediate PDF is rendered at the requested resolution without omission.
 However, LibreOffice and Microsoft Office use different rendering engines, so arbitrary Office documents are not guaranteed to match Microsoft Office output pixel for pixel.
@@ -21,7 +32,8 @@ Font substitution can change line breaks, character widths, and page counts.
 Install the fonts used by the source document and verify that the operating system recognizes them with a standard tool such as `fc-list`.
 When distributing or installing fonts on a server, comply with their license terms.
 
-The input file itself is never modified.
+Spreadsheet output uses one image per worksheet. XLS uses content-sized PDF pages, while XLSX and XLSM use one landscape page per worksheet. Large worksheets may therefore produce large images or small rendered text.
+XLSM macros are not executed during conversion.
 
 See [DESIGN.md](DESIGN.md) for the detailed design and guarantees.
 
@@ -59,7 +71,7 @@ python -m pip install -e './vendor/document-image-renderer[dev]'
 ## Installing LibreOffice
 
 No additional operating-system package is required when processing PDF input only.
-To process DOCX, PPTX, or XLSX files, install LibreOffice using the instructions below.
+To process DOC, DOCX, PPT, PPTX, XLS, XLSX, or XLSM files, install LibreOffice using the instructions below.
 
 <details><summary>Ubuntu and Debian</summary>
 
@@ -114,7 +126,7 @@ Specify the executable path with `libreoffice_executable` when using the Python 
 options = RenderOptions(
 	libreoffice_executable="/Applications/LibreOffice.app/Contents/MacOS/soffice",
 )
-result = render_document("report.docx", "rendered/report", options=options)
+result = render_document("samplefile.docx", "rendered/report", options=options)
 ```
 
 To use the CLI or bundled example, add the LibreOffice directory to `PATH` in the current shell:
@@ -146,7 +158,7 @@ If `soffice.exe` is not on `PATH`, specify the executable path when using the Py
 options = RenderOptions(
 	libreoffice_executable=r"C:\Program Files\LibreOffice\program\soffice.exe",
 )
-result = render_document("report.docx", "rendered/report", options=options)
+result = render_document("samplefile.docx", "rendered/report", options=options)
 ```
 
 To use the CLI or bundled example, add the LibreOffice directory to `PATH` in the current PowerShell session:
@@ -173,7 +185,7 @@ from pathlib import Path
 from document_image_renderer import RenderOptions, render_document
 
 result = render_document(
-	Path("report.docx"),
+	Path("samplefile.docx"),
 	Path("rendered/report"),
 	options=RenderOptions(dpi=200, image_format="png"),
 )
@@ -183,7 +195,7 @@ for image in result.images:
 	print(image.page_number, image.path, image.width, image.height)
 ```
 
-This example creates sequential images beginning with `rendered/report/report-page-0001.png`.
+This example creates sequential images beginning with `rendered/report/samplefile-page-0001.png`.
 The order of `result.images` matches the page order of the input document.
 
 ### Rendering options
@@ -200,22 +212,22 @@ The order of `result.images` matches the page order of the input document.
 
 Existing images with the same names are replaced.
 Unrelated files in the output directory are not deleted.
-Each XLSX worksheet is scaled to fit on one landscape page before rendering.
-For large worksheets, text and cells may become small in order to fit on one page.
+Each XLS, XLSX, or XLSM worksheet is rendered as one image.
+XLSX and XLSM worksheets are scaled to one landscape page, so text and cells may become small on large sheets.
 
 ## Command line
 
 The following command converts a document to 200 DPI PNG images:
 
 ```bash
-document-image-renderer tests/fixtures/documents/report.docx example/output/report
+document-image-renderer tests/fixtures/documents/samplefile.docx example/output/report
 ```
 
 Generated image paths are written to standard output in page order.
 To generate JPEG images, specify the format and quality:
 
 ```bash
-document-image-renderer report.pptx rendered/slides \
+document-image-renderer samplefile.pptx rendered/slides \
   --dpi 300 \
   --format jpeg \
   --jpeg-quality 92
@@ -226,7 +238,7 @@ Run `document-image-renderer --help` to see all arguments.
 
 ## Running the example program
 
-[example/convert_documents.py](example/convert_documents.py) converts `tests/fixtures/documents/report.docx` to 200 DPI PNG images.
+[example/convert_documents.py](example/convert_documents.py) converts `tests/fixtures/documents/samplefile.xlsm` to 200 DPI PNG images.
 Before running it, install LibreOffice and ensure that either `libreoffice` or `soffice` can be launched from `PATH`.
 
 Install the development dependencies from the repository root:
@@ -241,12 +253,13 @@ Then run the example:
 python example/convert_documents.py
 ```
 
-The program prints the page count, output directory, and generated image paths:
+The program prints the page count, output directory, and generated image paths as absolute paths. For readability, they are shown relative to the repository root below:
 
 ```text
-Converted 2 page(s) to example/output/report
-example/output/report/report-page-0001.png
-example/output/report/report-page-0002.png
+Converted 3 page(s) to example/output/report
+example/output/report/samplefile-page-0001.png
+example/output/report/samplefile-page-0002.png
+example/output/report/samplefile-page-0003.png
 ```
 
 Generated images are saved under `example/output/report/`.
@@ -266,7 +279,7 @@ All library-specific exceptions inherit from `RendererError`.
 from document_image_renderer import DocumentConversionError, render_document
 
 try:
-	render_document("report.xlsx", "rendered/report")
+	render_document("samplefile.xlsx", "rendered/report")
 except DocumentConversionError as error:
 	print(error.stderr)
 ```
@@ -280,7 +293,7 @@ python -m pytest
 python -m ruff check src tests example
 ```
 
-Integration tests that convert every document under `tests/fixtures/documents/` are enabled explicitly in an environment with LibreOffice:
+Integration tests convert every file directly under `tests/fixtures/documents/`. Enable them explicitly in an environment with LibreOffice:
 
 ```bash
 RUN_INTEGRATION_TESTS=1 python -m pytest -m integration
@@ -294,7 +307,9 @@ The dev container is optional; the library also works in standard Linux, macOS, 
 
 ## Operational considerations
 
-Encrypted documents, corrupted documents, and legacy Office binary formats (`.doc`, `.ppt`, and `.xls`) are not supported.
+Encrypted and corrupted documents are not supported.
+Macros are disabled through an isolated LibreOffice profile with the macro security level set to Very High.
+When processing untrusted documents, also enforce process, CPU, memory, storage, and execution-time limits outside this library.
 
 ## License
 

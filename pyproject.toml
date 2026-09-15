@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "document-image-renderer"
-version = "0.1.0"
+version = "0.2.0"
 description = "Render PDF and Office documents as page images"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,7 +12,7 @@ license = "Apache-2.0"
 authors = [
   { name = "document-image-renderer contributors" },
 ]
-keywords = ["document", "docx", "pdf", "pptx", "renderer", "xlsx"]
+keywords = ["document", "doc", "docx", "pdf", "ppt", "pptx", "renderer", "xls", "xlsx", "xlsm"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "License :: OSI Approved :: Apache Software License",

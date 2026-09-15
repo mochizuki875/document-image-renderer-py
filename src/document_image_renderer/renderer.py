@@ -21,11 +21,23 @@ from document_image_renderer.exceptions import (
 )
 from document_image_renderer.models import RenderedImage, RenderOptions, RenderResult
 
-SUPPORTED_EXTENSIONS = frozenset({".pdf", ".docx", ".pptx", ".xlsx"})
+SUPPORTED_EXTENSIONS = frozenset(
+    {".pdf", ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx", ".xlsm"}
+)
 OFFICE_EXTENSIONS = SUPPORTED_EXTENSIONS - {".pdf"}
 DRAWINGML_NAMESPACE = "http://schemas.openxmlformats.org/drawingml/2006/main"
 PRESENTATIONML_NAMESPACE = "http://schemas.openxmlformats.org/presentationml/2006/main"
 SPREADSHEETML_NAMESPACE = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+CALC_SINGLE_PAGE_FILTER = (
+        'pdf:calc_pdf_Export:{"SinglePageSheets":{"type":"boolean","value":"true"}}'
+)
+LIBREOFFICE_PROFILE = """<?xml version="1.0" encoding="UTF-8"?>
+<oor:items xmlns:oor="http://openoffice.org/2001/registry">
+    <item oor:path="/org.openoffice.Office.Common/Security/Scripting">
+        <prop oor:name="MacroSecurityLevel" oor:op="fuse"><value>3</value></prop>
+    </item>
+</oor:items>
+"""
 
 
 def render_document(
@@ -91,8 +103,10 @@ def _convert_office_to_pdf(
     profile_directory = working_directory / "profile"
     output_directory.mkdir()
     profile_directory.mkdir()
+    _configure_libreoffice_profile(profile_directory)
 
     conversion_source = _prepare_office_source(source, working_directory)
+    conversion_filter = CALC_SINGLE_PAGE_FILTER if source.suffix.lower() == ".xls" else "pdf"
 
     # An isolated profile avoids lock conflicts and user-specific LibreOffice settings.
     command = [
@@ -104,7 +118,7 @@ def _convert_office_to_pdf(
         "--nofirststartwizard",
         f"-env:UserInstallation={profile_directory.as_uri()}",
         "--convert-to",
-        "pdf",
+        conversion_filter,
         "--outdir",
         str(output_directory),
         str(conversion_source),
@@ -139,10 +153,20 @@ def _convert_office_to_pdf(
     return pdf_path
 
 
+def _configure_libreoffice_profile(profile_directory: Path) -> None:
+    user_directory = profile_directory / "user"
+    user_directory.mkdir()
+    # Very High security prevents document macros from running in the isolated profile.
+    (user_directory / "registrymodifications.xcu").write_text(
+        LIBREOFFICE_PROFILE,
+        encoding="utf-8",
+    )
+
+
 def _prepare_office_source(source: Path, working_directory: Path) -> Path:
     if source.suffix.lower() == ".pptx":
         return _normalize_pptx_lines(source, working_directory)
-    if source.suffix.lower() == ".xlsx":
+    if source.suffix.lower() in {".xlsx", ".xlsm"}:
         return _fit_xlsx_sheets_to_pages(source, working_directory)
     return source
 

@@ -5,6 +5,9 @@
     "context": ".."
   },
   "postCreateCommand": "python -m pip install -e '.[dev]'",
+  "mounts": [
+    "source=/etc/hosts,target=/etc/hosts,type=bind,readonly"
+  ],
   "customizations": {
     "vscode": {
       "extensions": [

@@ -1,4 +1,4 @@
-"""Convert the bundled report.docx fixture to page images."""
+"""Convert the bundled samplefile.docx fixture to page images."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from document_image_renderer import RenderOptions, render_document
 
 PROJECT_DIRECTORY = Path(__file__).parent.parent
 EXAMPLE_DIRECTORY = PROJECT_DIRECTORY / "example"
-SOURCE = PROJECT_DIRECTORY / "tests" / "fixtures" / "documents" / "report.docx"
+SOURCE = PROJECT_DIRECTORY / "tests" / "fixtures" / "documents" / "samplefile.docx"
 OUTPUT_DIRECTORY = EXAMPLE_DIRECTORY / "output" / "report"
 
 
