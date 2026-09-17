@@ -9,7 +9,7 @@ from document_image_renderer import RenderOptions, render_document
 PROJECT_DIRECTORY = Path(__file__).parent.parent
 EXAMPLE_DIRECTORY = PROJECT_DIRECTORY / "example"
 SOURCE = PROJECT_DIRECTORY / "tests" / "fixtures" / "documents" / "samplefile.docx"
-OUTPUT_DIRECTORY = EXAMPLE_DIRECTORY / "output" / "report"
+OUTPUT_DIRECTORY = EXAMPLE_DIRECTORY / "output"
 
 
 def main() -> int:

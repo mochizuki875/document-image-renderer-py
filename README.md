@@ -44,13 +44,13 @@ See [DESIGN.md](DESIGN.md) for the detailed design and guarantees.
 Install the repository directly into the current Python environment:
 
 ```bash
-python -m pip install "document-image-renderer @ git+https://github.com/mochizuki875/document-image-renderer.git"
+python -m pip install "document-image-renderer @ git+https://github.com/mochizuki875/document-image-renderer-py.git"
 ```
 
 To use a specific tag, branch, or commit, append `@<ref>` to the URL:
 
 ```bash
-python -m pip install "document-image-renderer @ git+https://github.com/mochizuki875/document-image-renderer.git@main"
+python -m pip install "document-image-renderer @ git+https://github.com/mochizuki875/document-image-renderer-py.git@main"
 ```
 
 ### Clone into another project and install
@@ -58,14 +58,14 @@ python -m pip install "document-image-renderer @ git+https://github.com/mochizuk
 From the root of the project that will use this library, clone the repository into a subdirectory and install it:
 
 ```bash
-git clone https://github.com/mochizuki875/document-image-renderer.git vendor/document-image-renderer
-python -m pip install ./vendor/document-image-renderer
+git clone https://github.com/mochizuki875/document-image-renderer-py.git vendor/document-image-renderer-py
+python -m pip install ./vendor/document-image-renderer-py
 ```
 
 To edit the library source while using it, install it in editable mode:
 
 ```bash
-python -m pip install -e './vendor/document-image-renderer[dev]'
+python -m pip install -e './vendor/document-image-renderer-py[dev]'
 ```
 
 ## Installing LibreOffice
@@ -126,7 +126,7 @@ Specify the executable path with `libreoffice_executable` when using the Python 
 options = RenderOptions(
 	libreoffice_executable="/Applications/LibreOffice.app/Contents/MacOS/soffice",
 )
-result = render_document("samplefile.docx", "rendered/report", options=options)
+result = render_document("samplefile.docx", "rendered", options=options)
 ```
 
 To use the CLI or bundled example, add the LibreOffice directory to `PATH` in the current shell:
@@ -158,7 +158,7 @@ If `soffice.exe` is not on `PATH`, specify the executable path when using the Py
 options = RenderOptions(
 	libreoffice_executable=r"C:\Program Files\LibreOffice\program\soffice.exe",
 )
-result = render_document("samplefile.docx", "rendered/report", options=options)
+result = render_document("samplefile.docx", "rendered", options=options)
 ```
 
 To use the CLI or bundled example, add the LibreOffice directory to `PATH` in the current PowerShell session:
@@ -186,7 +186,7 @@ from document_image_renderer import RenderOptions, render_document
 
 result = render_document(
 	Path("samplefile.docx"),
-	Path("rendered/report"),
+	Path("rendered"),
 	options=RenderOptions(dpi=200, image_format="png"),
 )
 
@@ -195,7 +195,7 @@ for image in result.images:
 	print(image.page_number, image.path, image.width, image.height)
 ```
 
-This example creates sequential images beginning with `rendered/report/samplefile-page-0001.png`.
+This example creates sequential images beginning with `rendered/samplefile-page-0001.png`.
 The order of `result.images` matches the page order of the input document.
 
 ### Rendering options
@@ -220,7 +220,7 @@ XLSX and XLSM worksheets are scaled to one landscape page, so text and cells may
 The following command converts a document to 200 DPI PNG images:
 
 ```bash
-document-image-renderer tests/fixtures/documents/samplefile.docx example/output/report
+document-image-renderer tests/fixtures/documents/samplefile.docx example/output
 ```
 
 Generated image paths are written to standard output in page order.
@@ -256,13 +256,13 @@ python example/convert_documents.py
 The program prints the page count, output directory, and generated image paths as absolute paths. For readability, they are shown relative to the repository root below:
 
 ```text
-Converted 3 page(s) to example/output/report
-example/output/report/samplefile-page-0001.png
-example/output/report/samplefile-page-0002.png
-example/output/report/samplefile-page-0003.png
+Converted 3 page(s) to example/output
+example/output/samplefile-page-0001.png
+example/output/samplefile-page-0002.png
+example/output/samplefile-page-0003.png
 ```
 
-Generated images are saved under `example/output/report/`.
+Generated images are saved under `example/output/`.
 
 ## Error handling
 
@@ -279,7 +279,7 @@ All library-specific exceptions inherit from `RendererError`.
 from document_image_renderer import DocumentConversionError, render_document
 
 try:
-	render_document("samplefile.xlsx", "rendered/report")
+	render_document("samplefile.xlsx", "rendered")
 except DocumentConversionError as error:
 	print(error.stderr)
 ```
